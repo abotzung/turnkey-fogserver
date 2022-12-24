@@ -7,7 +7,7 @@ FOG Project 1.5.9.235DEV - Free and Open-source Ghost
 that implements FOG (Free and Open-source Ghost), 
 a software tool that can deploy disk images of 
 Microsoft Windows and Linux using the Preboot 
- Execution Environment. It makes use of TFTP, 
+Execution Environment. It makes use of TFTP, 
 the Apache webserver and iPXE.
 It is written in PHP.
 
