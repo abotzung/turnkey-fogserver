@@ -1,0 +1,10 @@
+#!/bin/sh
+#  Alexandre BOTZUNG <alexandre.botzung@grandest.fr> - dec. 2022
+#  Reconfigure keyboard layout
+
+dpkg-reconfigure keyboard-configuration
+dpkg-reconfigure locales
+udevadm trigger --subsystem-match=input --action=change
+service keyboard-setup restart
+service console-setup restart
+

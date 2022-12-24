@@ -1,0 +1,168 @@
+#!/bin/bash
+# This script regen certificates for the FOG Server
+# WARNING ; This script needs atleast 1 valid ip address
+# WARNING ; This script destruct all present certificates in the system
+#  Alexandre BOTZUNG <alexandre.botzung@grandest.fr> - dec. 2022
+#
+#  --- This script includes components from the FOG Project ---
+#  FOG - Free, Open-Source Ghost is a computer imaging solution.
+#  Copyright (C) 2007  Chuck Syperski & Jian Zhang
+#
+#   This program is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#    any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# * @package  FOGProject
+# * @author   Tom Elliott <tommygunsster@gmail.com>
+# * @license  http://opensource.org/licenses/gpl-3.0 GPLv3
+# * @link     https://fogproject.org
+
+validip() {
+    local ip=$1
+    local stat=1
+    if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        OIFS=$IFS
+        IFS='.'
+        ip=($ip)
+        IFS=$OIFS
+        [[ ${ip[0]} -le 255 && ${ip[1]} -le 255 && ${ip[2]} -le 255 && ${ip[3]} -le 255 ]]
+        stat=$?
+    fi
+    echo $stat
+} 
+
+sslpath='/opt/fog/snapins/ssl/'
+sslprivkey="$sslpath/.srvprivate.key"
+webdirdest='/var/www/fog'
+
+export php_ver=$(php -i | grep "PHP Version" | head -1 | cut -d' ' -f 4 | cut -d'.' -f1-2)
+[[ -z ${phpfpm} ]] && export phpfpm="php${php_ver}-fpm"
+
+echo "==== Stop FOG services..."
+action=stop
+systemctl $action $phpfpm
+systemctl $action apache2
+systemctl $action FOGMulticastManager
+systemctl $action FOGImageReplicator
+systemctl $action FOGScheduler
+systemctl $action FOGSnapinReplicator
+systemctl $action FOGSnapinHash
+systemctl $action FOGPingHosts
+systemctl $action FOGImageSize
+
+echo "==== Do some cleanup..."
+rm $sslpath/ca.cnf
+rm $sslpath/fog.csr
+rm $sslpath/req.cnf
+rm $sslpath/.srvprivate.key
+
+rm $sslpath/CA/.fogCA.key
+rm $sslpath/CA/.fogCA.pem
+rm $sslpath/CA/.fogCA.srl
+rm $sslprivkey
+rm $webdirdest/management/other/ssl/srvpublic.crt
+rm $webdirdest/management/other/ca.cert.pem
+rm $webdirdest/management/other/ca.cert.der
+
+# PART 1 ; Regen SSL CA
+mkdir -p $sslpath/CA
+echo "==== Creating SSL CA"
+# PART 1 ---------
+openssl genrsa -out $sslpath/CA/.fogCA.key 4096
+openssl req -x509 -new -sha512 -nodes -key $sslpath/CA/.fogCA.key -days 3650 -out $sslpath/CA/.fogCA.pem << EOF
+.
+.
+.
+.
+.
+FOG Server CA
+.
+EOF
+
+hostname=$(hostname -s)
+ip=($(hostname -I && hostname -i))
+firstipaddr=${ip[0]}
+
+
+echo "==== Creating SSL Private Key"
+mkdir -p $sslpath
+openssl genrsa -out $sslprivkey 4096
+### /!\ DANGER /!\ Je dois peupler les variables ! /!\ DANGER /!\
+# PART 2 ------
+cat > $sslpath/req.cnf << EOF
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = yes
+[req_distinguished_name]
+CN = $firstipaddr
+[v3_req]
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = $hostname
+EOF
+cnt=1
+for t in ${ip[@]}; do
+    if [[ $(validip $t) -eq 0 ]]; then
+        echo "IP.$cnt = $t" >> $sslpath/req.cnf
+        echo "DNS.$cnt = $hostname" >> $sslpath/req.cnf
+        ((cnt=cnt+1))
+    fi
+done
+
+openssl req -new -sha512 -key $sslprivkey -out $sslpath/fog.csr -config $sslpath/req.cnf << EOF
+$firstipaddr
+EOF
+
+[[ ! -e $sslpath/.srvprivate.key ]] && ln -sf $sslprivkey $sslpath/.srvprivate.key
+
+echo "==== Creating SSL Certificate"
+mkdir -p $webdirdest/management/other/ssl
+    
+### /!\ DANGER /!\ Je dois peupler les variables ! /!\ DANGER /!\
+
+cat > $sslpath/ca.cnf << EOF
+[v3_ca]
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = $hostname
+EOF
+cnt=1
+for t in ${ip[@]}; do
+    if [[ $(validip $t) -eq 0 ]]; then
+        echo "IP.$cnt = $t" >> $sslpath/ca.cnf
+        echo "DNS.$cnt = $hostname" >> $sslpath/ca.cnf
+        ((cnt=cnt+1))
+    fi
+done
+
+
+openssl x509 -req -in $sslpath/fog.csr -CA $sslpath/CA/.fogCA.pem -CAkey $sslpath/CA/.fogCA.key -CAcreateserial -out $webdirdest/management/other/ssl/srvpublic.crt -days 3650 -extensions v3_ca -extfile $sslpath/ca.cnf
+
+echo "==== Creating auth pub key and cert"
+cp $sslpath/CA/.fogCA.pem $webdirdest/management/other/ca.cert.pem
+openssl x509 -outform der -in $webdirdest/management/other/ca.cert.pem -out $webdirdest/management/other/ca.cert.der
+
+echo "==== Resetting SSL Permissions"
+chown -R $apacheuser:$apacheuser $webdirdest/management/other
+
+echo "==== Starting FOG services..."
+action=start
+systemctl $action apache2
+systemctl $action $phpfpm
+systemctl $action FOGMulticastManager
+systemctl $action FOGImageReplicator
+systemctl $action FOGScheduler
+systemctl $action FOGSnapinReplicator
+systemctl $action FOGSnapinHash
+systemctl $action FOGPingHosts
+systemctl $action FOGImageSize

@@ -1,0 +1,77 @@
+#!/bin/bash -ex
+
+FOG_VER=1.5.9
+
+ADMIN_NAME=fog
+ADMIN_PASS=password
+
+SRC=/opt/foginstall/installer
+WEBROOT=/var/www/fog
+
+# --- Disable DHCP server
+systemctl disable isc-dhcp-server
+
+# --- Create the FOG installer folder
+mkdir -p $SRC
+
+# --- Download FOG installer (devel) from Gihub
+git clone https://github.com/FOGProject/fogproject.git $SRC
+cd $SRC
+git checkout dev-branch
+
+# --- HOTPATCH ; allow internationalization configuration from commandline
+# -installlang=""
+# +[[ -z $installlang ]] && installlang=0
+cd $SRC
+mv $SRC/lib/common/input.sh $SRC/lib/common/input.sh_OLD
+sed 's/installlang=""/[[ -z $installlang ]] \&\& installlang=0/g' $SRC/lib/common/input.sh_OLD > $SRC/lib/common/input.sh
+chmod +x $SRC/lib/common/input.sh
+
+# --- HOTPATCH ; FOG installation locks-up if the current hostname name is not populated into /etc/hosts
+cp /etc/hosts /etc/hosts_bak
+echo "127.0.0.1 $(hostname)" >> /etc/hosts
+
+# --- Install FOG Server 
+# "Normal" mode (opposed as storage mode)/ SSL Enabled by default
+cd bin
+export installlang=1; ./installfog.sh -S -Y
+
+# --- revert back HOTPATCH ; FOG installation crashes if the current system name is not populated into /etc/hosts
+cat /etc/hosts_bak > /etc/hosts
+rm /etc/hosts_bak
+
+# --- Prepare a faster buildipxe.sh script (without need for Internet)
+cp $SRC/utils/FOGiPXE/buildipxe.sh $SRC/utils/FOGiPXE/buildipxe_nonet.sh
+sed -i 's/git pull/#git pull/g' $SRC/utils/FOGiPXE/buildipxe_nonet.sh
+chmod +x $SRC/utils/FOGiPXE/buildipxe_nonet.sh
+
+# --- Add 17recompile_ipxecerts (Rebuild iPXE with new certificates regen by 16regen_fogcert)
+cat > /usr/lib/inithooks/firstboot.d/17recompile_ipxecerts << EOF
+#!/bin/bash
+# This script recompiles iPXE with new certificates
+cd $SRC/utils/FOGiPXE/
+echo "=== Recompiling iPXE with new certs, please wait. (5-10 minutes) ==="
+. buildipxe_nonet.sh > /dev/null
+cp -rv $SRC/packages/tftp/* /tftpboot
+EOF
+chmod +x /usr/lib/inithooks/firstboot.d/17recompile_ipxecerts
+
+# --- Cleanup
+cd /
+rm -rf $SRC/.git
+
+# --- Better locales : console-setup 
+CONF=/etc/default/console-setup
+
+FONTFACE=Fixed
+CODESET=guess
+FONTSIZE=8x16
+CHARMAP=UTF-8
+
+sed -i "/^CODESET/  s/=.*/=$CODESET/; \
+        /^FONTFACE/ s/=.*/=$FONTFACE/; \
+        /^FONTSIZE/ s/=.*/=$FONTSIZE/; \
+        /^CHARMAP/  s/=.*/=$CHARMAP/;" \
+    $CONF
+
+DEBIAN_FRONTEND=noninteractive dpkg-reconfigure console-setup

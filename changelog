@@ -1,0 +1,16 @@
+turnkey-fogserver-1.5.9.235 (1) turnkey; urgency=low
+
+  * Initial public release of TurnKey FOG Server (version 1.5.9.235 DEV).
+
+  * FOG Server related:
+
+    - Normal mode 
+    - SSL activated out of the box
+    - DHCP Server disabled
+
+  * SSL support out of the box.
+
+  * Regenerates all secrets during installation / firstboot (security).
+
+ -- Alexandre Botzung <alexandre.botzung@grandest.fr>  Sun, 24 Dec 2022 15:09:00 +0100
+

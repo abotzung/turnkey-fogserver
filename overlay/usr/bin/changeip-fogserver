@@ -1,0 +1,215 @@
+#!/bin/bash
+#  This script rebase the FOG server (changes IP / interface name / submask / hostname)
+#  Alexandre BOTZUNG <alexandre.botzung@grandest.fr> - dec. 2022
+#
+#  --- This script includes components from the FOG Project ---
+#  FOG - Free, Open-Source Ghost is a computer imaging solution.
+#  Copyright (C) 2007  Chuck Syperski & Jian Zhang
+#
+#   This program is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#    any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# * @package  FOGProject
+# * @author   Tom Elliott <tommygunsster@gmail.com>
+# * @license  http://opensource.org/licenses/gpl-3.0 GPLv3
+# * @link     https://fogproject.org
+
+
+getAllNetworkInterfaces() {
+    gatewayif=$(ip -4 route show | grep "^default via" | awk '{print $5}')
+    if [[ -z ${gatewayif} ]]; then
+        interfaces="$(ip -4 link | grep -v LOOPBACK | grep UP | awk -F': |@' '{print $2}' | tr '\n' ' ')"
+    else
+        interfaces="$gatewayif $(ip -4 link | grep -v LOOPBACK | grep UP | awk -F': |@' '{print $2}' | tr '\n' ' ' | sed "s/${gatewayif}//g")"
+    fi
+    echo -n $interfaces
+}
+
+getCidr() {
+    local cidr
+    cidr=$(ip -f inet -o addr | grep $1 | awk -F'[ /]+' '/global/ {print $5}' | head -n2 | tail -n1)
+    echo $cidr
+}
+
+cidr2mask() {
+    local i=""
+    local mask=""
+    local full_octets=$(($1/8))
+    local partial_octet=$(($1%8))
+    for ((i=0;i<4;i+=1)); do
+        if [[ $i -lt $full_octets ]]; then
+            mask+=255
+        elif [[ $i -eq $full_octets ]]; then
+            mask+=$((256 - 2**(8-$partial_octet)))
+        else
+            mask+=0
+        fi
+        test $i -lt 3 && mask+=.
+    done
+    echo $mask
+}
+
+replaceKeywordinConfigfile() {
+    local keyword="$1"
+    local newstring="$2"
+    local QUOAPOStr="$3" # Bad variable name, i know...
+    local QuelFichier="$4"
+
+    # Escape character for sed
+    keyword=$(printf '%s\n' "$keyword" | sed -e 's/[]\/$*.^[]/\\&/g');
+    newstring=$(printf '%s\n' "$newstring" | sed -e 's/[]\/$*.^[]/\\&/g');
+
+    retsearch=$(cat ${QuelFichier} | grep ${keyword})
+    if [[ -z "$retsearch" ]]; then
+        echo "Search returned nothing!"
+        exit 0
+    fi
+    # https://stackoverflow.com/questions/17542892/how-to-get-the-last-character-of-a-string-in-a-shell
+    lastchar=${retsearch: -1}
+
+    if [[ "${retsearch: -1}" == ";" ]]; then
+        # ; est la fin de ligne, on est donc en presence d'une ligne qui est terminee.
+        sed -i "/$keyword.*,/{;s/,\s.*/, $QUOAPOStr$newstring$QUOAPOStr);/g}" $QuelFichier
+    else
+        # ; n'est PAS la fin de ligne, on applique la methode alternative
+        # sed -i '/'$keyword'/{n;s/".*/"'$newstring'"/}' $FOGConfigfile
+        sed -i "/$keyword/{n;s/.*/$QUOAPOStr$newstring$QUOAPOStr/g}" $QuelFichier
+    fi
+}
+
+gatewayIP=$(ip -4 route show | grep "^default via" | awk '{print $3}')
+# ^ : 192.168.1.1
+allinterfaces=$(getAllNetworkInterfaces)
+# ^ : eth0 eth1 eth...
+strSuggestedInterface=$(echo ${allinterfaces} | awk '{print $1}')
+# ^ : eth0
+ipaddress=$(ip -4 addr show $strSuggestedInterface | awk '$1 == "inet" {gsub(/\/.*$/, "", $2); print $2}')
+# ^ : 192.168.1.100
+submask=$(cidr2mask $(getCidr $strSuggestedInterface))
+# ^ : 255.255.255.0
+hostname=$(hostname -s)
+# ^ : fogserver
+
+export php_ver=$(php -i | grep "PHP Version" | head -1 | cut -d' ' -f 4 | cut -d'.' -f1-2)
+[[ -z ${phpfpm} ]] && export phpfpm="php${php_ver}-fpm"
+
+
+if [[ -z "$gatewayIP" ]]; then
+	echo "ERROR : No gateway IP found"
+	exit 1
+fi
+if [[ -z "$strSuggestedInterface" ]]; then
+	echo "ERROR : No suggested interface found"
+	exit 1
+fi
+if [[ -z "$gatewayIP" ]]; then
+	echo "ERROR : No IP address for suggested interface ($strSuggestedInterface)"
+	exit 1
+fi
+if [[ -z "$submask" ]]; then
+	echo "ERROR : No submask found"
+	exit 1
+fi
+if [[ -z "$hostname" ]]; then
+	echo "ERROR : No hostname found"
+	exit 1
+fi
+
+FOGConfigfile=$(find /var/www -name config.class.php| head -n 1)
+APO="'"
+QUO='"'
+
+echo " === This server IP address is $ipaddress (from interface $strSuggestedInterface $submask)"
+
+echo ' === REBASE FOG server. Please wait... ==='
+echo '=> Stop FOG services...'
+action=stop
+systemctl $action $phpfpm
+systemctl $action apache2
+systemctl $action FOGMulticastManager
+systemctl $action FOGImageReplicator
+systemctl $action FOGScheduler
+systemctl $action FOGSnapinReplicator
+systemctl $action FOGSnapinHash
+systemctl $action FOGPingHosts
+systemctl $action FOGImageSize
+sleep 1
+
+# Rebase NFS Storage node :
+mysql -s -N --execute="UPDATE nfsGroupMembers SET ngmHostname = '$ipaddress',ngmInterface = '$strSuggestedInterface' WHERE ngmID = '1';" fog
+
+# Rebase TFTP IP :
+mysql -s -N --execute="UPDATE globalSettings SET settingValue = '$ipaddress' WHERE settingKey = 'FOG_TFTP_HOST';" fog
+
+# Rebase FOG IP :
+mysql -s -N --execute="UPDATE globalSettings SET settingValue = '$ipaddress' WHERE settingKey = 'FOG_WEB_HOST';" fog
+
+# Rebase FOG UDPCAST Interface :
+mysql -s -N --execute="UPDATE globalSettings SET settingValue = '$strSuggestedInterface' WHERE settingKey = 'FOG_UDPCAST_INTERFACE';" fog
+
+# Rebase FOG Traffic sumaries :
+mysql -s -N --execute="UPDATE globalSettings SET settingValue = '$strSuggestedInterface' WHERE settingKey = 'FOG_NFS_ETH_MONITOR';" fog
+
+# Reconfigure URL used by iPXE
+sed -i "s,//.*,//$ipaddress/fog/service/ipxe/boot.php##params,;" /tftpboot/default.ipxe
+
+# Rebase in config.class.php
+if [[ -f "$FOGConfigfile" ]]; then
+	# Rebase FTP / TFTP
+	#sed -i '/TFTP_HOST.*,/{;s/,\s.*/, '$QUO$ipaddress$QUO');/g}' $FOGConfigfile
+	replaceKeywordinConfigfile 'TFTP_HOST' "$ipaddress" "$QUO" $FOGConfigfile
+	#sed -i '/STORAGE_HOST.*,/{;s/,\s.*/, '$QUO$ipaddress$QUO');/g}' $FOGConfigfile
+	replaceKeywordinConfigfile 'STORAGE_HOST' "$ipaddress" "$QUO" $FOGConfigfile
+	# Rebase Web interface
+	#sed -i '/WEB_HOST.*,/{;s/,\s.*/, '$QUO$ipaddress$QUO');/g}' $FOGConfigfile
+	replaceKeywordinConfigfile 'WEB_HOST' "$ipaddress" "$QUO" $FOGConfigfile
+	#sed -i '/WOL_HOST.*,/{;s/,\s.*/, '$QUO$ipaddress$QUO');/g}' $FOGConfigfile
+	replaceKeywordinConfigfile 'WOL_HOST' "$ipaddress" "$QUO" $FOGConfigfile
+	# Rebase interface name 
+	#sed -i '/MULTICASTINTERFACE.*,/{;s/,\s.*/, '$APO$strSuggestedInterface$APO');/g}' $FOGConfigfile
+	replaceKeywordinConfigfile 'MULTICASTINTERFACE' "$strSuggestedInterface" "$APO" $FOGConfigfile
+	#sed -i '/STORAGE_INTERFACE.*,/{;s/,\s.*/, '$APO$strSuggestedInterface$APO');/g}' $FOGConfigfile
+	replaceKeywordinConfigfile 'STORAGE_INTERFACE' "$strSuggestedInterface" "$APO" $FOGConfigfile
+	#sed -i '/WOL_INTERFACE.*,/{;s/,\s.*/, '$QUO$strSuggestedInterface$QUO');/g}' $FOGConfigfile
+	replaceKeywordinConfigfile 'WOL_INTERFACE' "$strSuggestedInterface" "$QUO" $FOGConfigfile
+	#sed -i '/NFS_ETH_MONITOR.*,/{;s/,\s.*/, '$QUO$strSuggestedInterface$QUO');/g}' $FOGConfigfile
+	replaceKeywordinConfigfile 'NFS_ETH_MONITOR' "$strSuggestedInterface" "$QUO" $FOGConfigfile
+	#sed -i '/UDPCAST_INTERFACE.*,/{;s/,\s.*/, '$QUO$strSuggestedInterface$QUO');/g}' $FOGConfigfile
+	replaceKeywordinConfigfile 'UDPCAST_INTERFACE' "$strSuggestedInterface" "$QUO" $FOGConfigfile
+else
+	echo "ERROR : FOG Config file not found !"
+fi
+
+# Rebase IP configuration in .fogsettings
+sed -i "/ipaddress=/d; \$aipaddress=${APO}${ipaddress}${APO}" /opt/fog/.fogsettings
+sed -i "/interface=/d; \$ainterface=${APO}${strSuggestedInterface}${APO}" /opt/fog/.fogsettings
+sed -i "/plainrouter=/d; \$aplainrouter=${APO}${gatewayIP}${APO}" /opt/fog/.fogsettings
+sed -i "/routeraddress=/d; \$arouteraddress=${APO}${gatewayIP}${APO}" /opt/fog/.fogsettings
+sed -i "/submask=/d; \$asubmask=${APO}${submask}${APO}" /opt/fog/.fogsettings
+# Change hostname based from the system hostname
+sed -i "/hostname=/d; \$ahostname=${APO}${hostname}${APO}" /opt/fog/.fogsettings
+
+echo "==== Starting FOG services..."
+action=start
+systemctl $action apache2
+systemctl $action $phpfpm
+systemctl $action FOGMulticastManager
+systemctl $action FOGImageReplicator
+systemctl $action FOGScheduler
+systemctl $action FOGSnapinReplicator
+systemctl $action FOGSnapinHash
+systemctl $action FOGPingHosts
+systemctl $action FOGImageSize
+
+echo ' === REBASE FOG server done. Have a nice day! ==='
+sleep 1

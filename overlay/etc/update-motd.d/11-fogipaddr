@@ -1,0 +1,17 @@
+#!/bin/sh
+
+if [ -z "$TERM" ]; then
+    _term=linux
+else
+    _term=$TERM
+fi
+
+bold=$(tput -T $_term bold)
+normal=$(tput -T $_term sgr0)
+
+echo
+echo "    ${bold}***** Warning *****${normal}"
+echo
+echo "    After changing your IP address, launch this command: ${bold}changeip-fogserver${normal}"
+echo "    Unless executed, FOG Server will not work properly."
+echo
