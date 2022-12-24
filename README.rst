@@ -1,6 +1,8 @@
 FOG Project 1.5.9.235DEV - Free and Open-source Ghost
 =====================================================
 
+**This is the recipe for FAB (included in TKLDEV Turnkey DEV Environment)**
+
 `_FOG Project`_ The FOG Project is a software project 
 that implements FOG (Free and Open-source Ghost), 
 a software tool that can deploy disk images of 
@@ -19,11 +21,11 @@ and on top of that:
 
 - FOG Project configurations:
    
-   - Installed from upstream source code to /var/www/fog
+- Installed from upstream source code to /var/www/fog
 
-   **Security note**: Updates to FOG Project may require supervision so
-   they **ARE NOT** configured to install automatically. See `FOG
-   Project documentation`_ for upgrading.
+**Security note**: Updates to FOG Project may require supervision so
+they **ARE NOT** configured to install automatically. See `FOG
+Project documentation`_ for upgrading.
 
 - SSL support out of the box.
 - `Adminer`_ administration frontend for MySQL (listening on port
