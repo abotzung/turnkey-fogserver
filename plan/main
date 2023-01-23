@@ -50,6 +50,9 @@ xinetd
 zlib1g
 isc-dhcp-server
 php-intl
+
 keyboard-configuration
 console-data
 console-setup
+
+zstd
