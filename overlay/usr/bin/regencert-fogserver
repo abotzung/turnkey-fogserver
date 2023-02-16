@@ -154,6 +154,9 @@ openssl x509 -outform der -in $webdirdest/management/other/ca.cert.pem -out $web
 
 echo "==== Resetting SSL Permissions"
 chown -R $apacheuser:$apacheuser $webdirdest/management/other
+chmod -R 0777 "$webdirdest/management/other"
+chown -R fogproject:$apacheuser "$sslpath"
+chmod -R 0777 "$sslpath"
 
 echo "==== Starting FOG services..."
 action=start
