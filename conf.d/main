@@ -49,10 +49,14 @@ chmod +x $SRC/utils/FOGiPXE/buildipxe_nonet.sh
 cat > /usr/lib/inithooks/firstboot.d/17recompile_ipxecerts << EOF
 #!/bin/bash
 # This script recompiles iPXE with new certificates
+systemctl stop ntp
+find $SRC/utils/FOGiPXE/ -type f -exec touch {} +
+sleep 2
 cd $SRC/utils/FOGiPXE/
 echo "=== Recompiling iPXE with new certs, please wait. (5-10 minutes) ==="
 . buildipxe_nonet.sh > /dev/null
 cp -rv $SRC/packages/tftp/* /tftpboot
+systemctl start ntp
 EOF
 chmod +x /usr/lib/inithooks/firstboot.d/17recompile_ipxecerts
 
