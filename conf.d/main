@@ -17,7 +17,7 @@ mkdir -p $SRC
 # --- Download FOG installer (devel) from Gihub
 git clone https://github.com/FOGProject/fogproject.git $SRC
 cd $SRC
-git checkout dev-branch
+#git checkout dev-branch
 
 # --- HOTPATCH ; allow internationalization configuration from commandline
 # -installlang=""
