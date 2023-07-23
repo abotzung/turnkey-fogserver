@@ -3,7 +3,7 @@ FOG Project 1.5.9+ - Free and Open-source Ghost
 
 **This is the recipe for FAB (included in TKLDEV Turnkey DEV Environment)**
 
-`_FOG Project`_ The FOG Project is a software project 
+`FOG Project`_ The FOG Project is a software project 
 that implements FOG (Free and Open-source Ghost), 
 a software tool that can deploy disk images of 
 Microsoft Windows and Linux using the Preboot 
