@@ -14,7 +14,7 @@ systemctl disable isc-dhcp-server
 # --- Create the FOG installer folder
 mkdir -p $SRC
 
-# --- Download FOG installer (devel) from Gihub
+# --- Download FOG installer from Gihub
 git clone https://github.com/FOGProject/fogproject.git $SRC
 cd $SRC
 #git checkout dev-branch

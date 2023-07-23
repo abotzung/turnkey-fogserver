@@ -1,5 +1,5 @@
-FOG Project 1.5.9.235DEV - Free and Open-source Ghost
-=====================================================
+FOG Project 1.5.9+ - Free and Open-source Ghost
+===============================================
 
 **This is the recipe for FAB (included in TKLDEV Turnkey DEV Environment)**
 

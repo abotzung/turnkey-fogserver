@@ -15,3 +15,6 @@ echo
 echo "    After changing your IP address, launch this command: ${bold}changeip-fogserver${normal}"
 echo "    Unless executed, FOG Server will not work properly."
 echo
+echo "    ${bold}changeip-fogserver${normal} - Change the IP address inside FOG Server configuration"
+echo "    ${bold}regencert-fogserver${normal} - Regen web certificates (used by FOG Client)"
+echo "    ${bold}regensecret-fogserver${normal} - Regen all passwords used by FOG Server (FTP, web,...)"
