@@ -1,3 +1,13 @@
+turnkey-fogserver-1.5.10 (1) turnkey; urgency=low
+
+  * Update of Turnkey FOG Server (version 1.5.10 MAIN)
+
+  * Debian upgraded to 12 (based on TKLDEV 18rc0)
+
+  * Some bugs corrected (secret regen)
+
+ -- Alexandre Botzung <alexandre.botzung@grandest.fr>  Thu, 3 Aug 2023 14:34:00 +0100
+
 turnkey-fogserver-1.5.9.235 (1) turnkey; urgency=low
 
   * Initial public release of TurnKey FOG Server (version 1.5.9.235 DEV).

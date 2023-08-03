@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 
-FOG_VER=1.5.9
+FOG_VER=1.5.10
 
 ADMIN_NAME=fog
 ADMIN_PASS=password
