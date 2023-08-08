@@ -64,6 +64,11 @@ chmod +x /usr/lib/inithooks/firstboot.d/17recompile_ipxecerts
 cd /
 rm -rf $SRC/.git
 
+# --- Correct a debug leftover in confconsole
+#     (confconsole crashes if eth{TRUC} have not an valid ip address)
+sed -i 's/assert net.address is not None/#assert net.address is not None/g' /usr/lib/confconsole/ifutil.py
+sed -i 's/assert net.netmask is not None/#assert net.netmask is not None/g' /usr/lib/confconsole/ifutil.py
+
 # --- Better locales : console-setup 
 CONF=/etc/default/console-setup
 
