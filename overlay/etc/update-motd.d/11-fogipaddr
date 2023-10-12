@@ -18,3 +18,6 @@ echo
 echo "    ${bold}changeip-fogserver${normal} - Change the IP address inside FOG Server configuration"
 echo "    ${bold}regencert-fogserver${normal} - Regen web certificates (used by FOG Client)"
 echo "    ${bold}regensecret-fogserver${normal} - Regen all passwords used by FOG Server (FTP, web,...)"
+echo "    ${bold}recompileipxe-fogserver${normal} - Recompile iPXE with FOG certificates"
+echo ""
+
