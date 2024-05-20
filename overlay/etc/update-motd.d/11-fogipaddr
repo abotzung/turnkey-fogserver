@@ -78,15 +78,26 @@ if [ -r "$_SRVPUBLIC" ]; then
 	# Remove space in the string
 	_CN=$(echo "$_CN" | sed 's/ //g')
 	_LeCN=$(echo "$_CN" | cut -f3 -d"=")
-	
-	if [ "$ipaddress" != "$_LeCN" ]; then
+	_FOGIP=$(mysql -s -N --execute="SELECT settingValue FROM globalSettings WHERE settingKey = 'FOG_WEB_HOST';" fog 2>/dev/null)
+	execcmds=""
+
+	if [ "$ipaddress" != "$_LeCN" ] || [ "$_FOGIP" != "$ipaddress" ]; then
 		echo
-		echo "    ${bold}***** Warning *****${normal}"
+		echo "    $(tput -T $_term setaf 0; tput -T $_term setab 3)***** FOG Server ERROR *****${normal}"
 		echo
-		echo "$(tput -T $_term setaf 0; tput -T $_term setab 3)FOG Certificate ERROR${normal} ; $_LeCN (cert.) dosent match IP address $ipaddress ($strSuggestedInterface)"
-		echo "${normal}You ${bold}*must*${normal} generate a valid cert. with commands $(tput -T $_term setaf 5)regencert-fogserver${normal} and $(tput -T $_term setaf 5)recompileipxe-fogserver${normal}"
-		echo "${normal}Unless executed, FOG, iPXE and FOG Client will not work properly.${normal}"
+		if [ "$_FOGIP" != "$ipaddress" ]; then
+			echo " => FOG Current IP address ($_FOGIP) does not match IP address $ipaddress ($strSuggestedInterface) [IDADDR_ERROR]"
+			execcmds="\n * $(tput -T $_term setaf 5)changeip-fogserver${normal} (reconfigure FOG IP address)\n"
+		fi
+		if [ "$ipaddress" != "$_LeCN" ]; then
+			echo " => FOG Current certificate CN ($_LeCN) does not match IP address $ipaddress ($strSuggestedInterface) [CERTCN_ERROR]"
+			execcmds="${execcmds} * $(tput -T $_term setaf 5)regencert-fogserver${normal} (regenerate FOG certificates)\n * $(tput -T $_term setaf 5)recompileipxe-fogserver${normal} (recompile FOG iPXE)"
+		fi
+		echo "${normal}You ${bold}*must*${normal} restore the status of your FOG Server with theses commands (in order): ${execcmds}"
+		echo ''
+		echo "${normal}Unless executed, FOG Server, iPXE and FOG Client will not work properly.${normal}"
 	fi
+
 else
 	echo "ERR : Unable to locate srvpublic.crt"
 fi
