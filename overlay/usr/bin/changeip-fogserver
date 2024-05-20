@@ -1,6 +1,6 @@
 #!/bin/bash
 #  This script rebase the FOG server (changes IP / interface name / submask / hostname)
-#  Alexandre BOTZUNG <alexandre.botzung@grandest.fr> - dec. 2022
+#  Alexandre BOTZUNG <alexandre.botzung@grandest.fr> - may 2024
 #
 #  --- This script includes components from the FOG Project ---
 #  FOG - Free, Open-Source Ghost is a computer imaging solution.
@@ -112,7 +112,7 @@ if [[ -z "$strSuggestedInterface" ]]; then
 	echo "ERROR : No suggested interface found"
 	exit 1
 fi
-if [[ -z "$gatewayIP" ]]; then
+if [[ -z "$ipaddress" ]]; then
 	echo "ERROR : No IP address for suggested interface ($strSuggestedInterface)"
 	exit 1
 fi
@@ -126,13 +126,24 @@ if [[ -z "$hostname" ]]; then
 fi
 
 FOGConfigfile=$(find /var/www -name config.class.php| head -n 1)
+if [[ ! -f "$FOGConfigfile" ]]; then
+	echo "ERROR : FOG Config file (config.class.php) not found !"
+	sleep 5
+	exit 1
+fi
+if [[ ! -f "/opt/fog/.fogsettings" ]]; then
+	echo "ERROR : FOG Settings file (/opt/fog/.fogsettings) not found !"
+	sleep 5
+	exit 1
+fi
 APO="'"
 QUO='"'
 
-echo " === This server IP address is $ipaddress (from interface $strSuggestedInterface $submask)"
-
-echo ' === REBASE FOG server. Please wait... ==='
-echo '=> Stop FOG services...'
+echo ' === Change IP in FOG server. Please wait... ==='
+echo ''
+echo " -> This server primary IP address is $ipaddress (from interface $strSuggestedInterface $submask)"
+echo ''
+echo ' * Stop FOG services...'
 action=stop
 systemctl $action $phpfpm
 systemctl $action apache2
@@ -187,7 +198,9 @@ if [[ -f "$FOGConfigfile" ]]; then
 	#sed -i '/UDPCAST_INTERFACE.*,/{;s/,\s.*/, '$QUO$strSuggestedInterface$QUO');/g}' $FOGConfigfile
 	replaceKeywordinConfigfile 'UDPCAST_INTERFACE' "$strSuggestedInterface" "$QUO" $FOGConfigfile
 else
-	echo "ERROR : FOG Config file not found !"
+	echo "ERROR : FOG Config file (config.class.php) not found !"
+	sleep 5
+	exit 1
 fi
 
 # Rebase IP configuration in .fogsettings
@@ -199,7 +212,7 @@ sed -i "/submask=/d; \$asubmask=${APO}${submask}${APO}" /opt/fog/.fogsettings
 # Change hostname based from the system hostname
 sed -i "/hostname=/d; \$ahostname=${APO}${hostname}${APO}" /opt/fog/.fogsettings
 
-echo "==== Starting FOG services..."
+echo " * Starting FOG services..."
 action=start
 systemctl $action apache2
 systemctl $action $phpfpm
@@ -211,5 +224,55 @@ systemctl $action FOGSnapinHash
 systemctl $action FOGPingHosts
 systemctl $action FOGImageSize
 
-echo ' === REBASE FOG server done. Have a nice day! ==='
-sleep 1
+if [ -z "$TERM" ]; then
+    _term=linux
+else
+    _term=$TERM
+fi
+
+bold=$(tput -T $_term bold)
+normal=$(tput -T $_term sgr0)
+BG_YELLOW=$(tput -T $_term setab 3)
+FG_RED=$(tput -T $_term setab 3)
+
+echo 'Done !'
+
+# Here, is a little reminder/helper for us to REGENERATE certificates used by Fog 
+# (IP Address and cerificates are similar)
+
+_SRVPUBLIC=$(find /var -iregex '.*srvpublic.crt' | head -n 1 | xargs realpath)
+if [ -r "$_SRVPUBLIC" ]; then
+	openssl version >> /dev/null 2>&1
+	if [ "$?" -ne 0 ]; then
+		echo "openssl not found / generic error"
+		exit 1
+	fi
+	if [[ -z "$strSuggestedInterface" ]]; then
+		echo "ERROR : No suggested interface found"
+		exit 1
+	fi
+	if [[ -z "$ipaddress" ]]; then
+		echo "ERROR : No IP address for suggested interface ($strSuggestedInterface)"
+		exit 1
+	fi
+	if [[ -z "$submask" ]]; then
+		echo "ERROR : No submask found"
+		exit 1
+	fi
+	_CN=$(openssl x509 -noout -subject -in "$_SRVPUBLIC")
+	
+	# Remove space in the string
+	_CN=$(echo "$_CN" | sed 's/ //g')
+	_LeCN=$(echo "$_CN" | cut -f3 -d"=")
+	
+	if [ "$ipaddress" != "$_LeCN" ]; then
+		echo ''
+		echo "$(tput setaf 0; tput setab 3)FOG Certificate ERROR$(tput sgr0) ; $_LeCN (cert.) dosent match IP address $ipaddress ($strSuggestedInterface)"
+		echo "$(tput setaf 7)You must generate a valid certificate with commands $(tput setaf 5)regencert-fogserver$(tput setaf 7) and $(tput setaf 5)recompileipxe-fogserver$(tput sgr0)"
+		echo "$(tput setaf 7)Unless executed, FOG, iPXE and FOG Client will not work properly.$(tput sgr0)"
+		sleep 10
+	fi
+else
+	echo "INFO : Unable to locate srvpublic.crt"
+fi
+

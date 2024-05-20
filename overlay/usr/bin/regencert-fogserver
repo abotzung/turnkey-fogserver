@@ -40,6 +40,8 @@ validip() {
     echo $stat
 } 
 
+logname="/var/log/regencert-fogserver.log"
+
 sslpath='/opt/fog/snapins/ssl/'
 sslprivkey="$sslpath/.srvprivate.key"
 webdirdest='/var/www/fog'
@@ -47,38 +49,55 @@ webdirdest='/var/www/fog'
 export php_ver=$(php -i | grep "PHP Version" | head -1 | cut -d' ' -f 4 | cut -d'.' -f1-2)
 [[ -z ${phpfpm} ]] && export phpfpm="php${php_ver}-fpm"
 
-echo "==== Stop FOG services..."
+
+echo ' === REGENERATE FOG Certificates. Please wait... ==='
+echo " === REGENERATE FOG Certificates at $(date) ===" >> $logname 2>&1
+# NOTE : Use of hostname -I fallback to 127.0.1.1 if no other valid ip is found.
+
+hostname=$(hostname -s) 
+ip=($(hostname -I && hostname -i >> $logname 2>&1)) 
+firstipaddr=${ip[0]}
+
+echo "" >> $logname 2>&1
+echo "INFO : hostname is $hostname" >> $logname 2>&1
+echo "INFO : ip is $ip" >> $logname 2>&1
+echo "INFO : firstipaddr is $firstipaddr" >> $logname 2>&1
+
+echo ""
+echo " * Stop FOG services..."
+echo " * Stop FOG services..." >> $logname 2>&1
 action=stop
-systemctl $action $phpfpm
-systemctl $action apache2
-systemctl $action FOGMulticastManager
-systemctl $action FOGImageReplicator
-systemctl $action FOGScheduler
-systemctl $action FOGSnapinReplicator
-systemctl $action FOGSnapinHash
-systemctl $action FOGPingHosts
-systemctl $action FOGImageSize
+systemctl $action $phpfpm >> $logname 2>&1
+systemctl $action apache2 >> $logname 2>&1
+systemctl $action FOGMulticastManager >> $logname 2>&1
+systemctl $action FOGImageReplicator >> $logname 2>&1
+systemctl $action FOGScheduler >> $logname 2>&1
+systemctl $action FOGSnapinReplicator >> $logname 2>&1
+systemctl $action FOGSnapinHash >> $logname 2>&1
+systemctl $action FOGPingHosts >> $logname 2>&1
+systemctl $action FOGImageSize >> $logname 2>&1
 
-echo "==== Do some cleanup..."
-rm $sslpath/ca.cnf
-rm $sslpath/fog.csr
-rm $sslpath/req.cnf
-rm $sslpath/.srvprivate.key
+echo " * Do some cleanup..."
+rm -v "$sslpath/ca.cnf" >> $logname 2>&1
+rm -v "$sslpath/fog.csr" >> $logname 2>&1
+rm -v "$sslpath/req.cnf" >> $logname 2>&1
+rm -v "$sslprivkey" >> $logname 2>&1
 
-rm $sslpath/CA/.fogCA.key
-rm $sslpath/CA/.fogCA.pem
-rm $sslpath/CA/.fogCA.srl
-rm $sslprivkey
-rm $webdirdest/management/other/ssl/srvpublic.crt
-rm $webdirdest/management/other/ca.cert.pem
-rm $webdirdest/management/other/ca.cert.der
+rm -v "$sslpath/CA/.fogCA.key" >> $logname 2>&1
+rm -v "$sslpath/CA/.fogCA.pem" >> $logname 2>&1
+rm -v "$sslpath/CA/.fogCA.srl" >> $logname 2>&1
+
+rm -v "$webdirdest/management/other/ssl/srvpublic.crt" >> $logname 2>&1
+rm -v "$webdirdest/management/other/ca.cert.pem" >> $logname 2>&1
+rm -v "$webdirdest/management/other/ca.cert.der" >> $logname 2>&1
 
 # PART 1 ; Regen SSL CA
-mkdir -p $sslpath/CA
-echo "==== Creating SSL CA"
+mkdir -pv $sslpath/CA >> $logname 2>&1
+echo " * Creating SSL CA" >> $logname 2>&1
+echo " * Creating SSL CA" 
 # PART 1 ---------
-openssl genrsa -out $sslpath/CA/.fogCA.key 4096
-openssl req -x509 -new -sha512 -nodes -key $sslpath/CA/.fogCA.key -days 3650 -out $sslpath/CA/.fogCA.pem << EOF
+openssl genrsa -out $sslpath/CA/.fogCA.key 4096 >> $logname 2>&1
+openssl req -x509 -new -sha512 -nodes -key $sslpath/CA/.fogCA.key -days 3650 -out $sslpath/CA/.fogCA.pem << EOF >> $logname 2>&1
 .
 .
 .
@@ -88,14 +107,12 @@ FOG Server CA
 .
 EOF
 
-hostname=$(hostname -s)
-ip=($(hostname -I && hostname -i))
-firstipaddr=${ip[0]}
 
 
-echo "==== Creating SSL Private Key"
-mkdir -p $sslpath
-openssl genrsa -out $sslprivkey 4096
+echo " * Creating SSL Private Key..." >> $logname 2>&1
+echo " * Creating SSL Private Key..."
+mkdir -pv $sslpath >> $logname 2>&1
+openssl genrsa -out $sslprivkey 4096 >> $logname 2>&1
 ### /!\ DANGER /!\ Je dois peupler les variables ! /!\ DANGER /!\
 # PART 2 ------
 cat > $sslpath/req.cnf << EOF
@@ -119,17 +136,18 @@ for t in ${ip[@]}; do
     fi
 done
 
-openssl req -new -sha512 -key $sslprivkey -out $sslpath/fog.csr -config $sslpath/req.cnf << EOF
+echo "   -> CN = $firstipaddr"
+
+openssl req -new -sha512 -key $sslprivkey -out $sslpath/fog.csr -config $sslpath/req.cnf << EOF >> $logname 2>&1
 $firstipaddr
 EOF
 
 [[ ! -e $sslpath/.srvprivate.key ]] && ln -sf $sslprivkey $sslpath/.srvprivate.key
 
-echo "==== Creating SSL Certificate"
-mkdir -p $webdirdest/management/other/ssl
+echo " * Creating SSL Certificate..." >> $logname 2>&1
+echo " * Creating SSL Certificate..."
+mkdir -pv $webdirdest/management/other/ssl >> $logname 2>&1
     
-### /!\ DANGER /!\ Je dois peupler les variables ! /!\ DANGER /!\
-
 cat > $sslpath/ca.cnf << EOF
 [v3_ca]
 subjectAltName = @alt_names
@@ -145,20 +163,22 @@ for t in ${ip[@]}; do
     fi
 done
 
+openssl x509 -req -in $sslpath/fog.csr -CA $sslpath/CA/.fogCA.pem -CAkey $sslpath/CA/.fogCA.key -CAcreateserial -out $webdirdest/management/other/ssl/srvpublic.crt -days 3650 -extensions v3_ca -extfile $sslpath/ca.cnf >> $logname 2>&1
 
-openssl x509 -req -in $sslpath/fog.csr -CA $sslpath/CA/.fogCA.pem -CAkey $sslpath/CA/.fogCA.key -CAcreateserial -out $webdirdest/management/other/ssl/srvpublic.crt -days 3650 -extensions v3_ca -extfile $sslpath/ca.cnf
+echo " * Creating auth pub key and cert" >> $logname 2>&1
+echo " * Creating auth pub key and cert"
+cp -v $sslpath/CA/.fogCA.pem $webdirdest/management/other/ca.cert.pem >> $logname 2>&1
+openssl x509 -outform der -in $webdirdest/management/other/ca.cert.pem -out $webdirdest/management/other/ca.cert.der >> $logname 2>&1
 
-echo "==== Creating auth pub key and cert"
-cp $sslpath/CA/.fogCA.pem $webdirdest/management/other/ca.cert.pem
-openssl x509 -outform der -in $webdirdest/management/other/ca.cert.pem -out $webdirdest/management/other/ca.cert.der
-
-echo "==== Resetting SSL Permissions"
+echo " * Resetting SSL Permissions" >> $logname 2>&1
+echo " * Resetting SSL Permissions"
 chown -R $apacheuser:$apacheuser $webdirdest/management/other
-chmod -R 0777 "$webdirdest/management/other"
+chmod -R 0755 "$webdirdest/management/other"
 chown -R fogproject:$apacheuser "$sslpath"
-chmod -R 0777 "$sslpath"
+chmod -R 0755 "$sslpath"
 
-echo "==== Starting FOG services..."
+echo " * Starting FOG services..." >> $logname 2>&1
+echo " * Starting FOG services..."
 action=start
 systemctl $action apache2
 systemctl $action $phpfpm
@@ -169,3 +189,5 @@ systemctl $action FOGSnapinReplicator
 systemctl $action FOGSnapinHash
 systemctl $action FOGPingHosts
 systemctl $action FOGImageSize
+
+echo 'Done !'

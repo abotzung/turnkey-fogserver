@@ -9,11 +9,45 @@ fi
 bold=$(tput -T $_term bold)
 normal=$(tput -T $_term sgr0)
 
-echo
-echo "    ${bold}***** Warning *****${normal}"
-echo
-echo "    After changing your IP address, launch this command: ${bold}changeip-fogserver${normal}"
-echo "    Unless executed, FOG Server will not work properly."
+if [ "$EUID" -eq 0 ]
+	_SRVPUBLIC=$(find /var -iregex '.*srvpublic.crt' | head -n 1 | xargs realpath)
+	if [ -r "$_SRVPUBLIC" ]; then
+		openssl version >> /dev/null 2>&1
+		if [ "$?" -ne 0 ]; then
+			echo "openssl not found / generic error"
+			exit 1
+		fi
+		if [[ -z "$strSuggestedInterface" ]]; then
+			echo "ERROR : No suggested interface found"
+			exit 1
+		fi
+		if [[ -z "$ipaddress" ]]; then
+			echo "ERROR : No IP address for suggested interface ($strSuggestedInterface)"
+			exit 1
+		fi
+		if [[ -z "$submask" ]]; then
+			echo "ERROR : No submask found"
+			exit 1
+		fi
+		_CN=$(openssl x509 -noout -subject -in "$_SRVPUBLIC")
+		
+		# Remove space in the string
+		_CN=$(echo "$_CN" | sed 's/ //g')
+		_LeCN=$(echo "$_CN" | cut -f3 -d"=")
+		
+		if [ "$ipaddress" != "$_LeCN" ]; then
+			echo
+			echo "    ${bold}***** Warning *****${normal}"
+			echo
+			echo "$(tput setaf 0; tput setab 3)FOG Certificate ERROR$(tput sgr0) ; $_LeCN (cert.) dosent match IP address $ipaddress ($strSuggestedInterface)"
+			echo "$(tput setaf 7)You must generate a valid certificate with commands $(tput setaf 5)regencert-fogserver$(tput setaf 7) and $(tput setaf 5)recompileipxe-fogserver$(tput sgr0)"
+			echo "$(tput setaf 7)Unless executed, FOG, iPXE and FOG Client will not work properly.$(tput sgr0)"
+		fi
+	else
+		echo "ERR : Unable to locate srvpublic.crt"
+	fi
+fi
+
 echo
 echo "    ${bold}changeip-fogserver${normal} - Change the IP address inside FOG Server configuration"
 echo "    ${bold}regencert-fogserver${normal} - Regen web certificates (used by FOG Client)"
