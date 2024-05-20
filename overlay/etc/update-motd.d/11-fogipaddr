@@ -1,5 +1,63 @@
-#!/bin/sh
+#!/bin/bash
+# Teste si le certificat actuellement utilisé par FOG 
+#  est cohérent avec l'adresse IP actuelle.
+# Affiche un message en conséquence (uniquement pour l'utilisateur root).
+#
+#  --- This script includes components from the FOG Project ---
+#  FOG - Free, Open-Source Ghost is a computer imaging solution.
+#  Copyright (C) 2007  Chuck Syperski & Jian Zhang
+#
+#   This program is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#    any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# * @package  FOGProject
+# * @author   Tom Elliott <tommygunsster@gmail.com>
+# * @license  http://opensource.org/licenses/gpl-3.0 GPLv3
+# * @link     https://fogproject.org
 
+getAllNetworkInterfaces() {
+    gatewayif=$(ip -4 route show | grep "^default via" | awk '{print $5}')
+    if [[ -z ${gatewayif} ]]; then
+        interfaces="$(ip -4 link | grep -v LOOPBACK | grep UP | awk -F': |@' '{print $2}' | tr '\n' ' ')"
+    else
+        interfaces="$gatewayif $(ip -4 link | grep -v LOOPBACK | grep UP | awk -F': |@' '{print $2}' | tr '\n' ' ' | sed "s/${gatewayif}//g")"
+    fi
+    echo -n $interfaces
+}
+
+getCidr() {
+    local cidr
+    cidr=$(ip -f inet -o addr | grep $1 | awk -F'[ /]+' '/global/ {print $5}' | head -n2 | tail -n1)
+    echo $cidr
+}
+
+cidr2mask() {
+    local i=""
+    local mask=""
+    local full_octets=$(($1/8))
+    local partial_octet=$(($1%8))
+    for ((i=0;i<4;i+=1)); do
+        if [[ $i -lt $full_octets ]]; then
+            mask+=255
+        elif [[ $i -eq $full_octets ]]; then
+            mask+=$((256 - 2**(8-$partial_octet)))
+        else
+            mask+=0
+        fi
+        test $i -lt 3 && mask+=.
+    done
+    echo $mask
+}
 if [ -z "$TERM" ]; then
     _term=linux
 else
