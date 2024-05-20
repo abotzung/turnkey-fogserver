@@ -95,7 +95,9 @@ strSuggestedInterface=$(echo ${allinterfaces} | awk '{print $1}')
 # ^ : eth0
 ipaddress=$(ip -4 addr show $strSuggestedInterface | awk '$1 == "inet" {gsub(/\/.*$/, "", $2); print $2}')
 # ^ : 192.168.1.100
-submask=$(cidr2mask $(getCidr $strSuggestedInterface))
+if [[ -n "$strSuggestedInterface" && -n "$ipaddress" ]]; then
+	submask=$(cidr2mask $(getCidr $strSuggestedInterface))
+fi
 # ^ : 255.255.255.0
 hostname=$(hostname -s)
 # ^ : fogserver
@@ -103,10 +105,29 @@ hostname=$(hostname -s)
 export php_ver=$(php -i | grep "PHP Version" | head -1 | cut -d' ' -f 4 | cut -d'.' -f1-2)
 [[ -z ${phpfpm} ]] && export phpfpm="php${php_ver}-fpm"
 
+echo ' === Change IP in FOG server configuration. Please wait... ==='
+echo ''
 
-if [[ -z "$gatewayIP" ]]; then
-	echo "ERROR : No gateway IP found"
-	exit 1
+if [[ -z "$strSuggestedInterface" || -z "$ipaddress" ]]; then
+	echo "WARNING : No suggested interface found OR no IP address for suggested interface ($strSuggestedInterface)"
+	echo " Waiting 30 seconds for an IP address..."
+	
+	for i in {1..30}
+	do
+		sleep 1
+		allinterfaces=$(getAllNetworkInterfaces)
+		# ^ : eth0 eth1 eth...
+		strSuggestedInterface=$(echo ${allinterfaces} | awk '{print $1}')
+		# ^ : eth0
+		ipaddress=$(ip -4 addr show $strSuggestedInterface | awk '$1 == "inet" {gsub(/\/.*$/, "", $2); print $2}')
+		# ^ : 192.168.1.100
+		if [[ -n "$ipaddress" && -n "$strSuggestedInterface" ]]; then
+			submask=$(cidr2mask $(getCidr $strSuggestedInterface))
+			# ^ : 255.255.255.0
+			echo "IP address given ($ipaddress), continue..."
+			break
+		fi
+	done
 fi
 if [[ -z "$strSuggestedInterface" ]]; then
 	echo "ERROR : No suggested interface found"
@@ -124,6 +145,11 @@ if [[ -z "$hostname" ]]; then
 	echo "ERROR : No hostname found"
 	exit 1
 fi
+if [[ -z "$gatewayIP" ]]; then
+	echo "WARNING : No gateway found! Using 127.0.0.1 as default."
+	sleep 5
+	gatewayIP="127.0.0.1"
+fi
 
 FOGConfigfile=$(find /var/www -name config.class.php| head -n 1)
 if [[ ! -f "$FOGConfigfile" ]]; then
@@ -139,7 +165,6 @@ fi
 APO="'"
 QUO='"'
 
-echo ' === Change IP in FOG server. Please wait... ==='
 echo ''
 echo " -> This server primary IP address is $ipaddress (from interface $strSuggestedInterface $submask)"
 echo ''

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Teste si le certificat actuellement utilisé par FOG 
 #  est cohérent avec l'adresse IP actuelle.
 # Affiche un message en conséquence (uniquement pour l'utilisateur root).
@@ -27,7 +27,7 @@
 
 getAllNetworkInterfaces() {
     gatewayif=$(ip -4 route show | grep "^default via" | awk '{print $5}')
-    if [[ -z ${gatewayif} ]]; then
+    if [ -z ${gatewayif} ]; then
         interfaces="$(ip -4 link | grep -v LOOPBACK | grep UP | awk -F': |@' '{print $2}' | tr '\n' ' ')"
     else
         interfaces="$gatewayif $(ip -4 link | grep -v LOOPBACK | grep UP | awk -F': |@' '{print $2}' | tr '\n' ' ' | sed "s/${gatewayif}//g")"
@@ -41,75 +41,64 @@ getCidr() {
     echo $cidr
 }
 
-cidr2mask() {
-    local i=""
-    local mask=""
-    local full_octets=$(($1/8))
-    local partial_octet=$(($1%8))
-    for ((i=0;i<4;i+=1)); do
-        if [[ $i -lt $full_octets ]]; then
-            mask+=255
-        elif [[ $i -eq $full_octets ]]; then
-            mask+=$((256 - 2**(8-$partial_octet)))
-        else
-            mask+=0
-        fi
-        test $i -lt 3 && mask+=.
-    done
-    echo $mask
-}
 if [ -z "$TERM" ]; then
     _term=linux
 else
     _term=$TERM
 fi
-
 bold=$(tput -T $_term bold)
 normal=$(tput -T $_term sgr0)
 
-if [ "$EUID" -eq 0 ]
-	_SRVPUBLIC=$(find /var -iregex '.*srvpublic.crt' | head -n 1 | xargs realpath)
-	if [ -r "$_SRVPUBLIC" ]; then
-		openssl version >> /dev/null 2>&1
-		if [ "$?" -ne 0 ]; then
-			echo "openssl not found / generic error"
-			exit 1
-		fi
-		if [[ -z "$strSuggestedInterface" ]]; then
-			echo "ERROR : No suggested interface found"
-			exit 1
-		fi
-		if [[ -z "$ipaddress" ]]; then
-			echo "ERROR : No IP address for suggested interface ($strSuggestedInterface)"
-			exit 1
-		fi
-		if [[ -z "$submask" ]]; then
-			echo "ERROR : No submask found"
-			exit 1
-		fi
-		_CN=$(openssl x509 -noout -subject -in "$_SRVPUBLIC")
-		
-		# Remove space in the string
-		_CN=$(echo "$_CN" | sed 's/ //g')
-		_LeCN=$(echo "$_CN" | cut -f3 -d"=")
-		
-		if [ "$ipaddress" != "$_LeCN" ]; then
-			echo
-			echo "    ${bold}***** Warning *****${normal}"
-			echo
-			echo "$(tput setaf 0; tput setab 3)FOG Certificate ERROR$(tput sgr0) ; $_LeCN (cert.) dosent match IP address $ipaddress ($strSuggestedInterface)"
-			echo "$(tput setaf 7)You must generate a valid certificate with commands $(tput setaf 5)regencert-fogserver$(tput setaf 7) and $(tput setaf 5)recompileipxe-fogserver$(tput sgr0)"
-			echo "$(tput setaf 7)Unless executed, FOG, iPXE and FOG Client will not work properly.$(tput sgr0)"
-		fi
-	else
-		echo "ERR : Unable to locate srvpublic.crt"
+gatewayIP=$(ip -4 route show | grep "^default via" | awk '{print $3}')
+# ^ : 192.168.1.1
+allinterfaces=$(getAllNetworkInterfaces)
+# ^ : eth0 eth1 eth...
+strSuggestedInterface=$(echo ${allinterfaces} | awk '{print $1}')
+# ^ : eth0
+ipaddress=$(ip -4 addr show $strSuggestedInterface | awk '$1 == "inet" {gsub(/\/.*$/, "", $2); print $2}')
+# ^ : 192.168.1.100
+_SRVPUBLIC=$(find /var -iregex '.*srvpublic.crt' | head -n 1 | xargs realpath)
+if [ -r "$_SRVPUBLIC" ]; then
+	openssl version >> /dev/null 2>&1
+	if [ "$?" -ne 0 ]; then
+		echo "openssl not found / generic error"
+		exit 1
 	fi
+	if [ -z "$strSuggestedInterface" ]; then
+		echo "ERROR : No suggested interface found"
+		exit 1
+	fi
+	if [ -z "$ipaddress" ]; then
+		echo "ERROR : No IP address for suggested interface ($strSuggestedInterface)"
+		exit 1
+	fi
+
+	_CN=$(openssl x509 -noout -subject -in "$_SRVPUBLIC")
+	
+	# Remove space in the string
+	_CN=$(echo "$_CN" | sed 's/ //g')
+	_LeCN=$(echo "$_CN" | cut -f3 -d"=")
+	
+	if [ "$ipaddress" != "$_LeCN" ]; then
+		echo
+		echo "    ${bold}***** Warning *****${normal}"
+		echo
+		echo "$(tput -T $_term setaf 0; tput -T $_term setab 3)FOG Certificate ERROR${normal} ; $_LeCN (cert.) dosent match IP address $ipaddress ($strSuggestedInterface)"
+		echo "${normal}You ${bold}*must*${normal} generate a valid cert. with commands $(tput -T $_term setaf 5)regencert-fogserver${normal} and $(tput -T $_term setaf 5)recompileipxe-fogserver${normal}"
+		echo "${normal}Unless executed, FOG, iPXE and FOG Client will not work properly.${normal}"
+	fi
+else
+	echo "ERR : Unable to locate srvpublic.crt"
 fi
 
+
+
+
+
 echo
-echo "    ${bold}changeip-fogserver${normal} - Change the IP address inside FOG Server configuration"
-echo "    ${bold}regencert-fogserver${normal} - Regen web certificates (used by FOG Client)"
-echo "    ${bold}regensecret-fogserver${normal} - Regen all passwords used by FOG Server (FTP, web,...)"
-echo "    ${bold}recompileipxe-fogserver${normal} - Recompile iPXE with FOG certificates"
+echo "  ${bold}changeip-fogserver${normal} - Change the IP address inside FOG Server configuration"
+echo "  ${bold}regencert-fogserver${normal} - Regen web certificates (used by FOG Client)"
+echo "  ${bold}regensecret-fogserver${normal} - Regen all passwords used by FOG Server (FTP, web,...)"
+echo "  ${bold}recompileipxe-fogserver${normal} - Recompile iPXE with FOG certificates"
 echo ""
 
