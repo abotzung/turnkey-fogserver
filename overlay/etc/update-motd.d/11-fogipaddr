@@ -1,7 +1,9 @@
 #!/bin/sh
 # Teste si le certificat actuellement utilisé par FOG 
 #  est cohérent avec l'adresse IP actuelle.
-# Affiche un message en conséquence (uniquement pour l'utilisateur root).
+# Teste aussi si l'adresse IP interne de FOG (dans la BDD fog)
+#  est cohérente avec l'adresse IP actuelle.
+# Affiche un message en conséquence
 #
 #  --- This script includes components from the FOG Project ---
 #  FOG - Free, Open-Source Ghost is a computer imaging solution.
@@ -114,6 +116,9 @@ if [ "$_badcert" -eq 1 ] || [ "$_FOGIP" != "$ipaddress" ]; then
 	echo "${normal}You ${bold}*must*${normal} restore the status of your FOG Server with theses commands (in this order): ${execcmds}"
 	echo ''
 	echo "${normal}Unless executed, FOG Server, iPXE and FOG Client will not work properly.${normal}"
+	printf "\nNOTE : Remember to configure in your DHCP server options :"
+	echo " * ${bold}066${normal} (PXE Server hostname/'next-server') to ${bold}${ipaddress}${normal}"
+	echo " * ${bold}067${normal} (PXE Boot Filename/'filename') to ${bold}undionly.kkpxe or snponly.efi${normal}"
 fi
 
 echo
