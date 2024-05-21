@@ -100,16 +100,18 @@ if [ "$_badcert" -eq 1 ] || [ "$_FOGIP" != "$ipaddress" ]; then
 	echo
 	if [ "$_FOGIP" != "$ipaddress" ]; then
 		#echo " => FOG Current IP address ($_FOGIP) does not match IP address $ipaddress ($strSuggestedInterface) [IDADDR_ERROR]"
-		echo " => The IP address of this server $strSuggestedInterface ($ipaddress) does not match FOG IP address ($_FOGIP)"
+		#echo " => The IP address of this server $ipaddress ($strSuggestedInterface) does not match FOG IP address ($_FOGIP)"
+		echo " => The IP address of this server $ipaddress ($strSuggestedInterface) does not match FOG IP address."
 		#----------------------------------------------------------------------------------------------------------
 		execcmds="\n * $(tput -T $_term setaf 5)changeip-fogserver${normal} (reconfigure FOG IP address)\n"
 	fi
 	if [ "$ipaddress" != "$_LeCN" ]; then
 		#echo " => FOG Current certificate CN ($_LeCN) does not match IP address $ipaddress ($strSuggestedInterface) [CERTCN_ERROR]"
-		echo " => The IP address of this server $ipaddress ($strSuggestedInterface) does not match FOG Cert CN ($_LeCN)"
+		#echo " => The IP address of this server $ipaddress ($strSuggestedInterface) does not match FOG Cert CN ($_LeCN)"
+		echo " => The IP address of this server $ipaddress ($strSuggestedInterface) does not match FOG Cert. CN."
 		execcmds="${execcmds} * $(tput -T $_term setaf 5)regencert-fogserver${normal} (regenerate FOG certificates)\n * $(tput -T $_term setaf 5)recompileipxe-fogserver${normal} (recompile FOG iPXE)"
 	fi
-	echo "${normal}You ${bold}*must*${normal} restore the status of your FOG Server with theses commands (in order): ${execcmds}"
+	echo "${normal}You ${bold}*must*${normal} restore the status of your FOG Server with theses commands (in this order): ${execcmds}"
 	echo ''
 	echo "${normal}Unless executed, FOG Server, iPXE and FOG Client will not work properly.${normal}"
 fi
