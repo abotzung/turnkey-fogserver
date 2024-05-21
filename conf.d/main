@@ -62,7 +62,9 @@ chmod +x /usr/lib/inithooks/firstboot.d/17recompile_ipxecerts
 
 # --- Cleanup
 cd /
-rm -rf $SRC/.git
+rm -rf "$SRC/.git"
+rm -rf "$SRC/tmp"
+mkdir "$SRC/tmp" || true
 
 # --- Correct a debug leftover in confconsole
 #     (confconsole crashes if eth{TRUC} have not an valid ip address)
