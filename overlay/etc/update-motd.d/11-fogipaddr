@@ -116,7 +116,7 @@ if [ "$_badcert" -eq 1 ] || [ "$_FOGIP" != "$ipaddress" ]; then
 	echo "${normal}You ${bold}*must*${normal} restore the status of your FOG Server with theses commands (in this order): ${execcmds}"
 	echo ''
 	echo "${normal}Unless executed, FOG Server, iPXE and FOG Client will not work properly.${normal}"
-	printf "\nNOTE : Remember to configure in your DHCP server options :"
+	printf "\nNOTE : Remember to configure in your DHCP server options :\n"
 	echo " * ${bold}066${normal} (PXE Server hostname/'next-server') to ${bold}${ipaddress}${normal}"
 	echo " * ${bold}067${normal} (PXE Boot Filename/'filename') to ${bold}undionly.kkpxe or snponly.efi${normal}"
 fi
